@@ -2,182 +2,324 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lota Master Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lota Multijugador</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .cell { background: #1e293b; border: 1px solid #334155; transition: 0.3s; font-size: 0.7rem; }
-        .active { background: #10b981 !important; color: white; box-shadow: 0 0 10px #10b981; }
-        .last-call { background: #3b82f6 !important; animation: pulse 1s infinite; z-index: 10; transform: scale(1.1); }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        .grid-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 4px; width: 100%; }
+        .cell { aspect-ratio: 1; background: #1e293b; border: 1px solid #334155; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #64748b; font-size: 0.8rem; transition: background 0.2s; }
+        .active { background: #22c55e !important; color: white; border-color: #4ade80; }
+        .last-call { background: #3b82f6 !important; color: white; transform: scale(1.1); z-index: 10; box-shadow: 0 0 10px rgba(59, 130, 246, 0.6); animation: pulse 1s infinite; border: 2px solid white; }
+        @keyframes pulse { 0%, 100% { transform: scale(1.1); } 50% { transform: scale(1.2); } }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
     </style>
 </head>
-<body class="bg-slate-900 text-white min-h-screen font-sans">
+<body>
 
-    <div id="view-login" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
-        <div class="bg-slate-800 p-8 rounded-3xl w-full max-w-md border border-slate-700">
-            <h1 class="text-3xl font-black text-center text-blue-500 mb-6 italic">LOTA PRO</h1>
-            <div class="space-y-4">
-                <input id="in-name" type="text" placeholder="Nombre" class="w-full bg-slate-700 p-4 rounded-xl outline-none">
-                <input id="in-chips" type="number" placeholder="Fichas" class="w-full bg-slate-700 p-4 rounded-xl outline-none">
-                <div class="flex bg-slate-900 p-1 rounded-xl">
-                    <button onclick="setRole('player')" id="rp" class="flex-1 py-2 rounded-lg bg-blue-600 font-bold">Jugador</button>
-                    <button onclick="setRole('admin')" id="ra" class="flex-1 py-2 rounded-lg font-bold">Admin</button>
-                </div>
-                <input id="in-pass" type="password" placeholder="Clave Admin" class="hidden w-full bg-slate-900 p-4 rounded-xl border border-blue-500">
-                <button onclick="join()" class="w-full bg-blue-600 p-4 rounded-xl font-black text-xl">ENTRAR</button>
+    <header class="flex justify-between items-center p-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20 shadow-md">
+        <div class="bg-slate-800 px-3 py-1 rounded border border-slate-700">
+            <p class="text-[10px] text-slate-500 font-bold uppercase">Pozo</p>
+            <p id="stat-pot" class="text-lg font-black text-green-400 leading-none">Bs 0</p>
+        </div>
+        
+        <div class="flex items-center gap-2 overflow-x-auto mx-2 hide-scroll">
+            <span class="text-[9px] uppercase font-bold text-slate-600 hidden sm:block">Últimos:</span>
+            <div id="history-box" class="flex gap-1"></div>
+        </div>
+
+        <div id="audio-status" class="hidden text-xs text-slate-500 font-bold mr-2 border border-slate-700 px-2 py-1 rounded">🔇 Audio en TV</div>
+
+        <button id="btn-admin-config" onclick="toggleModal('modal-admin')" class="hidden bg-slate-800 w-10 h-10 flex items-center justify-center rounded-lg border border-slate-700 text-xl hover:bg-slate-700 transition-colors">⚙️</button>
+    </header>
+
+    <main class="flex-1 overflow-y-auto flex flex-col p-3 relative w-full max-w-4xl mx-auto pb-32">
+        <div class="text-center mb-4 shrink-0">
+            <div id="big-num" class="text-7xl md:text-9xl font-black text-white leading-none tracking-tighter drop-shadow-2xl h-20 md:h-32">--</div>
+            <div id="game-status" class="text-[10px] font-bold text-blue-500 uppercase tracking-[0.2em] mt-1 bg-blue-500/10 inline-block px-2 rounded">Esperando</div>
+        </div>
+
+        <div id="board" class="grid-board bg-slate-900/40 p-2 rounded-xl border border-slate-800/50 mb-4 shrink-0"></div>
+
+        <div class="grid grid-cols-2 gap-3 mt-2 shrink-0">
+            <div class="bg-slate-900/80 rounded-lg p-2 border border-slate-800">
+                <h3 class="text-[10px] font-black text-slate-500 uppercase mb-2 border-b border-slate-800 pb-1">🏆 Ganadores</h3>
+                <div id="podium-list" class="space-y-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div class="bg-slate-900/80 rounded-lg p-2 border border-slate-800">
+                <h3 class="text-[10px] font-black text-slate-500 uppercase mb-2 border-b border-slate-800 pb-1">👥 En Sala</h3>
+                <div id="player-list" class="space-y-1 max-h-32 overflow-y-auto"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="footer-lota" class="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-950 to-transparent z-30">
+        <div class="max-w-4xl mx-auto">
+            <button id="btn-lota" onclick="socket.emit('claim_lota')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-3xl py-4 rounded-2xl shadow-[0_10px_30px_-10px_rgba(37,99,235,0.5)] active:scale-95 transition-all border-t border-blue-400">
+                ¡LOTA!
+            </button>
+        </div>
+    </div>
+
+    <div id="verify-bar" class="hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t-2 border-yellow-500 z-50 p-4 shadow-2xl">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-4">
+            <div class="text-center sm:text-left">
+                <p class="text-[10px] font-black text-yellow-500 uppercase tracking-widest">¡ALGUIEN GRITÓ LOTA!</p>
+                <h2 id="claimant-name" class="text-xl font-black text-white uppercase">NOMBRE</h2>
+            </div>
+            <div class="flex gap-2 w-full sm:w-auto flex-1">
+                <button onclick="socket.emit('admin_verify', true)" class="flex-1 bg-green-600 hover:bg-green-500 text-white p-3 rounded-xl font-bold shadow-lg">✅ ACEPTAR</button>
+                <button onclick="socket.emit('admin_verify', false)" class="flex-1 bg-red-600 hover:bg-red-500 text-white p-3 rounded-xl font-bold shadow-lg">❌ DENEGAR</button>
             </div>
         </div>
     </div>
 
-    <div id="view-game" class="hidden flex flex-col lg:flex-row h-screen overflow-hidden">
-        
-        <aside class="w-full lg:w-72 bg-slate-800 border-r border-slate-700 p-4 flex flex-col gap-4 overflow-y-auto">
-            <div class="p-3 bg-slate-900 rounded-xl">
-                <p class="text-xs text-slate-500 font-bold uppercase">Sala de Espera</p>
-                <div id="player-list" class="mt-2 space-y-1"></div>
-            </div>
-
-            <div class="p-3 bg-slate-900 rounded-xl">
-                <p class="text-xs text-yellow-500 font-bold uppercase">Podio de Premios</p>
-                <div id="podium-list" class="mt-2 space-y-2"></div>
-            </div>
-
-            <div id="admin-panel" class="hidden p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl space-y-3">
-                <p class="text-xs font-black text-blue-400 uppercase text-center">Controles Admin</p>
-                <input id="cfg-max" type="number" value="100" class="w-full bg-slate-800 p-2 rounded text-xs" placeholder="Máx Números">
-                <select id="cfg-winners" class="w-full bg-slate-800 p-2 rounded text-xs">
-                    <option value="1">1 Ganador</option>
-                    <option value="2">2 Ganadores (60/40)</option>
-                    <option value="3" selected>3 Ganadores (50/30/20)</option>
-                </select>
-                <button onclick="startGame()" class="w-full bg-green-600 py-2 rounded font-bold text-xs">INICIAR</button>
-                <div id="verify-controls" class="hidden flex gap-2">
-                    <button onclick="socket.emit('admin_verify', true)" class="flex-1 bg-yellow-500 text-black py-2 rounded font-bold text-xs">ACEPTAR</button>
-                    <button onclick="socket.emit('admin_verify', false)" class="flex-1 bg-red-600 py-2 rounded font-bold text-xs">RECHAZAR</button>
-                </div>
-            </div>
-        </aside>
-
-        <main class="flex-1 p-4 lg:p-6 flex flex-col items-center bg-slate-950 overflow-y-auto">
-            <div class="flex w-full max-w-4xl justify-between items-start mb-4">
-                <div class="text-center bg-slate-900 p-4 rounded-2xl border border-slate-800 min-w-[120px]">
-                    <p class="text-[10px] text-slate-500 uppercase font-bold">Pozo</p>
-                    <p id="stat-pot" class="text-2xl font-black text-green-400">Bs 0</p>
-                </div>
+    <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-6">
+        <div class="bg-slate-900 p-6 rounded-2xl w-full max-w-sm border border-slate-800 shadow-2xl">
+            <h1 class="text-2xl font-black text-center mb-6 text-white tracking-tighter">LOTA <span class="text-blue-500">PRO</span></h1>
+            <div class="space-y-3">
+                <input id="in-name" type="text" placeholder="Tu Nombre / ID Pantalla" class="w-full bg-slate-800 p-3 rounded-lg outline-none text-white border border-slate-700 focus:border-blue-500">
                 
-                <div class="text-center">
-                    <div id="big-num" class="text-8xl lg:text-[160px] font-black leading-none text-white drop-shadow-xl">--</div>
-                    <div id="game-status" class="text-sm font-bold text-blue-400 uppercase tracking-tighter mt-2">Sincronizando...</div>
+                <div id="div-chips">
+                    <input id="in-chips" type="number" placeholder="Cantidad de Fichas" class="w-full bg-slate-800 p-3 rounded-lg outline-none text-white border border-slate-700 focus:border-blue-500">
                 </div>
 
-                <div class="bg-slate-900 p-3 rounded-2xl border border-slate-800">
-                    <p class="text-[10px] text-slate-500 uppercase font-bold text-center mb-1">Últimos</p>
-                    <div id="history-box" class="flex gap-2"></div>
+                <div class="flex gap-1 bg-slate-800 p-1 rounded-lg">
+                    <button onclick="setRole('player')" id="btn-rp" class="flex-1 py-2 rounded font-bold text-xs bg-blue-600 text-white">Jugador</button>
+                    <button onclick="setRole('screen')" id="btn-rs" class="flex-1 py-2 rounded font-bold text-xs text-slate-400 hover:bg-slate-700">Pantalla</button>
+                    <button onclick="setRole('admin')" id="btn-ra" class="flex-1 py-2 rounded font-bold text-xs text-slate-400 hover:bg-slate-700">Admin</button>
                 </div>
+
+                <input id="in-pass" type="password" placeholder="Contraseña Admin" class="hidden w-full bg-slate-950 p-3 rounded-lg border border-blue-500 outline-none text-center tracking-widest">
+                <button onclick="join()" class="w-full bg-blue-600 py-3 rounded-lg font-black text-white mt-2 shadow-lg">ENTRAR</button>
             </div>
+        </div>
+    </div>
 
-            <div id="board" class="grid grid-cols-10 gap-1 w-full max-w-4xl bg-slate-900 p-2 rounded-xl border border-slate-800"></div>
+    <div id="modal-admin" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 p-5 rounded-2xl w-full max-w-sm border border-slate-700 shadow-2xl">
+            <h2 class="text-lg font-bold text-white mb-4 border-b border-slate-800 pb-2">Configuración</h2>
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold">Números</label>
+                        <input id="cfg-max" type="number" value="100" class="w-full bg-slate-800 p-2 rounded border border-slate-700 text-center text-sm">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-500 uppercase font-bold">Precio (Bs)</label>
+                        <input id="cfg-price" type="number" step="0.5" value="10" class="w-full bg-slate-800 p-2 rounded border border-slate-700 text-center text-sm">
+                    </div>
+                </div>
 
-            <button onclick="socket.emit('claim_lota')" class="mt-6 w-full max-w-md py-5 bg-yellow-500 text-slate-950 font-black text-3xl rounded-2xl shadow-[0_8px_0_#a16207] active:translate-y-1 transition-all">
-                ¡LOTA!
-            </button>
-        </main>
+                <div>
+                    <label class="text-[10px] text-slate-500 uppercase font-bold block mb-1">Velocidad (Segundos)</label>
+                    <input id="cfg-speed" type="number" min="2" max="20" value="5" class="w-full bg-slate-800 p-2 rounded border border-slate-700 text-center text-sm font-bold text-blue-400">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <select id="cfg-winners" class="w-full bg-slate-800 p-2 rounded text-xs text-white border border-slate-700">
+                        <option value="1">1 Ganador</option>
+                        <option value="2">2 Ganadores</option>
+                        <option value="3" selected>3 Ganadores</option>
+                    </select>
+                    <select id="cfg-voice" class="w-full bg-slate-800 p-2 rounded text-xs text-white border border-slate-700">
+                        <option value="female">Voz Mujer</option>
+                        <option value="male">Voz Varón</option>
+                    </select>
+                </div>
+
+                <button onclick="emitStart()" class="w-full bg-green-600 py-3 rounded-lg font-bold text-white shadow-lg text-sm">INICIAR / APLICAR</button>
+
+                <div class="flex gap-2 pt-2 border-t border-slate-800">
+                    <button onclick="socket.emit('pause_game')" class="flex-1 bg-yellow-600/20 text-yellow-500 py-2 rounded font-bold text-xs border border-yellow-600/50">Pausar</button>
+                    <button onclick="socket.emit('resume_game')" class="flex-1 bg-blue-600/20 text-blue-500 py-2 rounded font-bold text-xs border border-blue-600/50">Seguir</button>
+                    <button onclick="socket.emit('reset_game')" class="flex-1 bg-red-600/20 text-red-500 py-2 rounded font-bold text-xs border border-red-600/50">Reset</button>
+                </div>
+                <button onclick="toggleModal('modal-admin')" class="w-full text-slate-500 text-xs py-2 mt-2">Cerrar</button>
+            </div>
+        </div>
     </div>
 
     <script>
         const socket = io();
         let role = 'player';
+        let hasActiveScreen = false;
 
         function setRole(r) {
             role = r;
-            document.getElementById('rp').className = `flex-1 py-2 rounded-lg font-bold ${r==='player'?'bg-blue-600':'bg-slate-700'}`;
-            document.getElementById('ra').className = `flex-1 py-2 rounded-lg font-bold ${r==='admin'?'bg-blue-600':'bg-slate-700'}`;
-            document.getElementById('in-pass').classList.toggle('hidden', r==='player');
+            const btnP = document.getElementById('btn-rp');
+            const btnS = document.getElementById('btn-rs');
+            const btnA = document.getElementById('btn-ra');
+            const pass = document.getElementById('in-pass');
+            const chipsDiv = document.getElementById('div-chips');
+            
+            // Reset styles
+            [btnP, btnS, btnA].forEach(b => b.className = "flex-1 py-2 rounded font-bold text-xs text-slate-400 hover:bg-slate-700");
+            pass.classList.add('hidden');
+            chipsDiv.classList.remove('hidden');
+
+            if(r === 'player') {
+                btnP.className = "flex-1 py-2 rounded font-bold text-xs bg-blue-600 text-white shadow";
+            } else if (r === 'screen') {
+                btnS.className = "flex-1 py-2 rounded font-bold text-xs bg-purple-600 text-white shadow";
+                chipsDiv.classList.add('hidden'); // Pantalla no compra fichas
+            } else {
+                btnA.className = "flex-1 py-2 rounded font-bold text-xs bg-blue-600 text-white shadow";
+                pass.classList.remove('hidden');
+            }
         }
 
+        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+
         function join() {
+            const name = document.getElementById('in-name').value;
+            if(!name) return alert("Pon un nombre");
             socket.emit('join', {
-                name: document.getElementById('in-name').value,
+                name: name,
                 chips: document.getElementById('in-chips').value,
                 role: role,
                 password: document.getElementById('in-pass').value
             });
         }
 
-        function startGame() {
+        function emitStart() {
             socket.emit('start_game', {
                 maxNumbers: document.getElementById('cfg-max').value,
-                winnersCount: document.getElementById('adm-winners').value,
-                pricePerChip: 10,
-                speed: 4
+                winnersCount: document.getElementById('cfg-winners').value,
+                speed: document.getElementById('cfg-speed').value,
+                voice: document.getElementById('cfg-voice').value,
+                pricePerChip: document.getElementById('cfg-price').value
             });
+            toggleModal('modal-admin');
         }
 
+        // SOCKET LOGIC
         socket.on('error_msg', m => alert(m));
-        socket.on('notify_claim', n => alert('¡' + n + ' solicita validación de LOTA!'));
 
         socket.on('sync', state => {
             const me = state.players[socket.id];
-            if(me) {
-                document.getElementById('view-login').style.display = 'none';
-                document.getElementById('view-game').classList.remove('hidden');
-                document.getElementById('admin-panel').classList.toggle('hidden', !me.isAdmin);
+            hasActiveScreen = state.hasActiveScreen;
+
+            // Mostrar/Ocultar indicador de audio
+            if (hasActiveScreen && role !== 'screen') {
+                document.getElementById('audio-status').classList.remove('hidden');
+            } else {
+                document.getElementById('audio-status').classList.add('hidden');
             }
 
-            // Sala de espera
+            if(me) {
+                document.getElementById('view-login').style.display = 'none';
+                
+                // Configurar vista según rol
+                if(me.role === 'admin') {
+                    document.getElementById('btn-admin-config').classList.remove('hidden');
+                    document.getElementById('footer-lota').classList.remove('hidden');
+                    if(state.status === 'verifying') {
+                        document.getElementById('verify-bar').classList.remove('hidden');
+                        document.getElementById('footer-lota').classList.add('hidden');
+                        document.getElementById('claimant-name').innerText = state.pendingClaim.name;
+                    } else {
+                        document.getElementById('verify-bar').classList.add('hidden');
+                    }
+                } else if(me.role === 'screen') {
+                    document.getElementById('footer-lota').classList.add('hidden'); // Pantalla limpia
+                } else {
+                    // Jugador
+                    document.getElementById('verify-bar').classList.add('hidden');
+                    document.getElementById('footer-lota').classList.remove('hidden');
+                }
+            }
+
+            document.getElementById('stat-pot').innerText = `Bs ${state.results.totalPot.toFixed(2)}`;
+            
+            const statusLabel = document.getElementById('game-status');
+            statusLabel.innerText = state.status === 'verifying' ? 'Verificando...' : 
+                                   state.status === 'playing' ? `Cantando (${state.config.speed}s)` : 
+                                   state.status === 'finished' ? 'Finalizado' : 'Esperando';
+            
+            // Botón Lota logic
+            const didIWin = state.results.winners.some(w => w.socketId === socket.id);
+            const btnLota = document.getElementById('btn-lota');
+            if(didIWin) {
+                btnLota.disabled = true;
+                btnLota.innerText = "¡GANASTE!";
+                btnLota.className = "w-full bg-slate-800 text-green-500 font-black text-2xl py-4 rounded-2xl border border-green-500/50 cursor-not-allowed";
+            } else {
+                btnLota.disabled = false;
+                btnLota.innerText = "¡LOTA!";
+                btnLota.className = "w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-3xl py-4 rounded-2xl shadow-[0_10px_30px_-10px_rgba(37,99,235,0.5)] active:scale-95 transition-all border-t border-blue-400";
+            }
+
+            // Listas
             document.getElementById('player-list').innerHTML = Object.values(state.players).map(p => `
-                <div class="flex justify-between text-[10px] p-1 border-b border-slate-700">
-                    <span class="${p.isAdmin?'text-blue-400':'text-white'}">${p.name}</span>
-                    <span class="text-slate-500">${p.chips} fichas</span>
+                <div class="flex justify-between text-[10px] p-1 border-b border-slate-800">
+                    <span class="${p.role==='admin' ? 'text-blue-400 font-bold' : (p.role==='screen' ? 'text-purple-400 font-bold' : 'text-slate-300')}">${p.name}</span>
+                    <span class="text-slate-500">${p.role === 'screen' ? 'TV' : p.chips + 'f'}</span>
                 </div>
             `).join('');
 
-            // Podio
             let podiumHTML = '';
             for(let i=1; i<=state.config.winnersCount; i++) {
                 const win = state.results.winners.find(w => w.place === i);
                 podiumHTML += `
-                    <div class="bg-slate-800 p-2 rounded border-l-4 ${win?'border-green-500':'border-slate-600'}">
-                        <p class="text-[10px] text-slate-500 font-bold">LUGAR #${i}</p>
-                        <p class="text-xs font-bold">${win ? win.name : '---'}</p>
-                        <p class="text-[10px] text-green-400">${win ? 'Bs '+win.prize.toFixed(2) : 'Pendiente'}</p>
+                    <div class="flex justify-between items-center p-1 border-b border-slate-800 ${win ? 'bg-green-500/10' : ''}">
+                        <span class="text-[10px] font-bold text-slate-500 mr-2">#${i}</span>
+                        <span class="text-xs font-bold text-white truncate flex-1">${win ? win.name : '---'}</span>
+                        <span class="text-[10px] font-bold text-green-400">${win ? 'Bs '+win.prize.toFixed(2) : ''}</span>
                     </div>`;
             }
             document.getElementById('podium-list').innerHTML = podiumHTML;
 
-            // Tablero Dinámico
+            // Tablero
             const board = document.getElementById('board');
             if(board.childElementCount !== parseInt(state.maxNumbers)) {
                 board.innerHTML = '';
                 for(let i=1; i<=state.maxNumbers; i++) {
                     const d = document.createElement('div');
-                    d.id = `n-${i}`; d.className = 'cell aspect-square flex items-center justify-center font-bold text-slate-600 rounded';
-                    d.innerText = i; board.appendChild(d);
+                    d.id = `n-${i}`; d.className = 'cell'; d.innerText = i; board.appendChild(d);
                 }
             }
             document.querySelectorAll('.cell').forEach(c => c.classList.remove('active', 'last-call'));
             state.calledNumbers.forEach(n => document.getElementById(`n-${n}`)?.classList.add('active'));
             if(state.history[0]) document.getElementById(`n-${state.history[0]}`)?.classList.add('last-call');
 
-            // Historial últimos 5
+            // Historial
             document.getElementById('history-box').innerHTML = state.history.map((n, i) => `
-                <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold ${i==0?'border-2 border-blue-500':''}">${n}</div>
+                <div class="w-6 h-6 shrink-0 rounded bg-slate-800 flex items-center justify-center text-[10px] font-bold border border-slate-700 ${i==0?'text-white bg-blue-600 border-blue-500':''}">
+                    ${n}
+                </div>
             `).join('');
-
-            document.getElementById('stat-pot').innerText = `Bs ${state.results.totalPot}`;
-            document.getElementById('verify-controls').classList.toggle('hidden', state.status !== 'verifying');
-            document.getElementById('game-status').innerText = state.status === 'verifying' ? 'VERIFICANDO GANADOR...' : 
-                                                              state.status === 'playing' ? 'CANTANDO NÚMEROS' : 'ESPERANDO';
         });
 
-        socket.on('new_number', n => {
-            document.getElementById('big-num').innerText = n;
-            const s = new SpeechSynthesisUtterance(n);
-            s.lang = 'es-ES';
-            window.speechSynthesis.speak(s);
+        // TTS LOGIC
+        socket.on('new_number', data => {
+            document.getElementById('big-num').innerText = data.number;
+            handleSpeak(data.number.toString(), data.voice);
         });
+
+        socket.on('speak_announcement', text => handleSpeak(text, 'female'));
+
+        function handleSpeak(text, gender) {
+            // REGLA MAESTRA DE AUDIO:
+            // Si hay pantalla y NO soy pantalla -> SILENCIO
+            if (hasActiveScreen && role !== 'screen') return;
+
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'es-ES';
+            u.rate = 1.0; 
+            const voices = window.speechSynthesis.getVoices();
+            let voice = null;
+            if(gender === 'male') {
+                voice = voices.find(v => v.lang.includes('es') && (v.name.includes('Male') || v.name.includes('Google') || v.name.includes('Pablo')));
+            } else {
+                voice = voices.find(v => v.lang.includes('es') && (v.name.includes('Female') || v.name.includes('Helena') || v.name.includes('Sabina')));
+            }
+            if(voice) u.voice = voice;
+            window.speechSynthesis.speak(u);
+        }
     </script>
 </body>
 </html>
