@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lota Master Pro</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .cell { background: #1e293b; border: 1px solid #334155; transition: 0.3s; font-size: 0.7rem; }
+        .active { background: #10b981 !important; color: white; box-shadow: 0 0 10px #10b981; }
+        .last-call { background: #3b82f6 !important; animation: pulse 1s infinite; z-index: 10; transform: scale(1.1); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen font-sans">
+
+    <div id="view-login" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 p-8 rounded-3xl w-full max-w-md border border-slate-700">
+            <h1 class="text-3xl font-black text-center text-blue-500 mb-6 italic">LOTA PRO</h1>
+            <div class="space-y-4">
+                <input id="in-name" type="text" placeholder="Nombre" class="w-full bg-slate-700 p-4 rounded-xl outline-none">
+                <input id="in-chips" type="number" placeholder="Fichas" class="w-full bg-slate-700 p-4 rounded-xl outline-none">
+                <div class="flex bg-slate-900 p-1 rounded-xl">
+                    <button onclick="setRole('player')" id="rp" class="flex-1 py-2 rounded-lg bg-blue-600 font-bold">Jugador</button>
+                    <button onclick="setRole('admin')" id="ra" class="flex-1 py-2 rounded-lg font-bold">Admin</button>
+                </div>
+                <input id="in-pass" type="password" placeholder="Clave Admin" class="hidden w-full bg-slate-900 p-4 rounded-xl border border-blue-500">
+                <button onclick="join()" class="w-full bg-blue-600 p-4 rounded-xl font-black text-xl">ENTRAR</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-game" class="hidden flex flex-col lg:flex-row h-screen overflow-hidden">
+        
+        <aside class="w-full lg:w-72 bg-slate-800 border-r border-slate-700 p-4 flex flex-col gap-4 overflow-y-auto">
+            <div class="p-3 bg-slate-900 rounded-xl">
+                <p class="text-xs text-slate-500 font-bold uppercase">Sala de Espera</p>
+                <div id="player-list" class="mt-2 space-y-1"></div>
+            </div>
+
+            <div class="p-3 bg-slate-900 rounded-xl">
+                <p class="text-xs text-yellow-500 font-bold uppercase">Podio de Premios</p>
+                <div id="podium-list" class="mt-2 space-y-2"></div>
+            </div>
+
+            <div id="admin-panel" class="hidden p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl space-y-3">
+                <p class="text-xs font-black text-blue-400 uppercase text-center">Controles Admin</p>
+                <input id="cfg-max" type="number" value="100" class="w-full bg-slate-800 p-2 rounded text-xs" placeholder="Máx Números">
+                <select id="cfg-winners" class="w-full bg-slate-800 p-2 rounded text-xs">
+                    <option value="1">1 Ganador</option>
+                    <option value="2">2 Ganadores (60/40)</option>
+                    <option value="3" selected>3 Ganadores (50/30/20)</option>
+                </select>
+                <button onclick="startGame()" class="w-full bg-green-600 py-2 rounded font-bold text-xs">INICIAR</button>
+                <div id="verify-controls" class="hidden flex gap-2">
+                    <button onclick="socket.emit('admin_verify', true)" class="flex-1 bg-yellow-500 text-black py-2 rounded font-bold text-xs">ACEPTAR</button>
+                    <button onclick="socket.emit('admin_verify', false)" class="flex-1 bg-red-600 py-2 rounded font-bold text-xs">RECHAZAR</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-4 lg:p-6 flex flex-col items-center bg-slate-950 overflow-y-auto">
+            <div class="flex w-full max-w-4xl justify-between items-start mb-4">
+                <div class="text-center bg-slate-900 p-4 rounded-2xl border border-slate-800 min-w-[120px]">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold">Pozo</p>
+                    <p id="stat-pot" class="text-2xl font-black text-green-400">Bs 0</p>
+                </div>
+                
+                <div class="text-center">
+                    <div id="big-num" class="text-8xl lg:text-[160px] font-black leading-none text-white drop-shadow-xl">--</div>
+                    <div id="game-status" class="text-sm font-bold text-blue-400 uppercase tracking-tighter mt-2">Sincronizando...</div>
+                </div>
+
+                <div class="bg-slate-900 p-3 rounded-2xl border border-slate-800">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold text-center mb-1">Últimos</p>
+                    <div id="history-box" class="flex gap-2"></div>
+                </div>
+            </div>
+
+            <div id="board" class="grid grid-cols-10 gap-1 w-full max-w-4xl bg-slate-900 p-2 rounded-xl border border-slate-800"></div>
+
+            <button onclick="socket.emit('claim_lota')" class="mt-6 w-full max-w-md py-5 bg-yellow-500 text-slate-950 font-black text-3xl rounded-2xl shadow-[0_8px_0_#a16207] active:translate-y-1 transition-all">
+                ¡LOTA!
+            </button>
+        </main>
+    </div>
+
+    <script>
+        const socket = io();
+        let role = 'player';
+
+        function setRole(r) {
+            role = r;
+            document.getElementById('rp').className = `flex-1 py-2 rounded-lg font-bold ${r==='player'?'bg-blue-600':'bg-slate-700'}`;
+            document.getElementById('ra').className = `flex-1 py-2 rounded-lg font-bold ${r==='admin'?'bg-blue-600':'bg-slate-700'}`;
+            document.getElementById('in-pass').classList.toggle('hidden', r==='player');
+        }
+
+        function join() {
+            socket.emit('join', {
+                name: document.getElementById('in-name').value,
+                chips: document.getElementById('in-chips').value,
+                role: role,
+                password: document.getElementById('in-pass').value
+            });
+        }
+
+        function startGame() {
+            socket.emit('start_game', {
+                maxNumbers: document.getElementById('cfg-max').value,
+                winnersCount: document.getElementById('adm-winners').value,
+                pricePerChip: 10,
+                speed: 4
+            });
+        }
+
+        socket.on('error_msg', m => alert(m));
+        socket.on('notify_claim', n => alert('¡' + n + ' solicita validación de LOTA!'));
+
+        socket.on('sync', state => {
+            const me = state.players[socket.id];
+            if(me) {
+                document.getElementById('view-login').style.display = 'none';
+                document.getElementById('view-game').classList.remove('hidden');
+                document.getElementById('admin-panel').classList.toggle('hidden', !me.isAdmin);
+            }
+
+            // Sala de espera
+            document.getElementById('player-list').innerHTML = Object.values(state.players).map(p => `
+                <div class="flex justify-between text-[10px] p-1 border-b border-slate-700">
+                    <span class="${p.isAdmin?'text-blue-400':'text-white'}">${p.name}</span>
+                    <span class="text-slate-500">${p.chips} fichas</span>
+                </div>
+            `).join('');
+
+            // Podio
+            let podiumHTML = '';
+            for(let i=1; i<=state.config.winnersCount; i++) {
+                const win = state.results.winners.find(w => w.place === i);
+                podiumHTML += `
+                    <div class="bg-slate-800 p-2 rounded border-l-4 ${win?'border-green-500':'border-slate-600'}">
+                        <p class="text-[10px] text-slate-500 font-bold">LUGAR #${i}</p>
+                        <p class="text-xs font-bold">${win ? win.name : '---'}</p>
+                        <p class="text-[10px] text-green-400">${win ? 'Bs '+win.prize.toFixed(2) : 'Pendiente'}</p>
+                    </div>`;
+            }
+            document.getElementById('podium-list').innerHTML = podiumHTML;
+
+            // Tablero Dinámico
+            const board = document.getElementById('board');
+            if(board.childElementCount !== parseInt(state.maxNumbers)) {
+                board.innerHTML = '';
+                for(let i=1; i<=state.maxNumbers; i++) {
+                    const d = document.createElement('div');
+                    d.id = `n-${i}`; d.className = 'cell aspect-square flex items-center justify-center font-bold text-slate-600 rounded';
+                    d.innerText = i; board.appendChild(d);
+                }
+            }
+            document.querySelectorAll('.cell').forEach(c => c.classList.remove('active', 'last-call'));
+            state.calledNumbers.forEach(n => document.getElementById(`n-${n}`)?.classList.add('active'));
+            if(state.history[0]) document.getElementById(`n-${state.history[0]}`)?.classList.add('last-call');
+
+            // Historial últimos 5
+            document.getElementById('history-box').innerHTML = state.history.map((n, i) => `
+                <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold ${i==0?'border-2 border-blue-500':''}">${n}</div>
+            `).join('');
+
+            document.getElementById('stat-pot').innerText = `Bs ${state.results.totalPot}`;
+            document.getElementById('verify-controls').classList.toggle('hidden', state.status !== 'verifying');
+            document.getElementById('game-status').innerText = state.status === 'verifying' ? 'VERIFICANDO GANADOR...' : 
+                                                              state.status === 'playing' ? 'CANTANDO NÚMEROS' : 'ESPERANDO';
+        });
+
+        socket.on('new_number', n => {
+            document.getElementById('big-num').innerText = n;
+            const s = new SpeechSynthesisUtterance(n);
+            s.lang = 'es-ES';
+            window.speechSynthesis.speak(s);
+        });
+    </script>
+</body>
+</html>
