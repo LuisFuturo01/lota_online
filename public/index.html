@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lota Multijugador</title>
+    <title>Lota con Lucho</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -19,20 +19,26 @@
 </head>
 <body>
 
-    <header class="flex justify-between items-center p-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20 shadow-md">
-        <div class="bg-slate-800 px-3 py-1 rounded border border-slate-700">
-            <p class="text-[10px] text-slate-500 font-bold uppercase">Pozo</p>
-            <p id="stat-pot" class="text-lg font-black text-green-400 leading-none">Bs 0</p>
+    <header class="flex justify-between items-center p-2 sm:p-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20 shadow-md">
+        
+        <div class="flex items-center gap-2 sm:gap-3">
+            <img src="/prin.png" alt="Logo Lota con Lucho" class="w-8 h-8 sm:w-10 sm:h-10 object-contain">
+            <div class="bg-slate-800 px-2 py-1 sm:px-3 rounded border border-slate-700">
+                <p class="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase">Pozo</p>
+                <p id="stat-pot" class="text-sm sm:text-lg font-black text-green-400 leading-none">Bs 0</p>
+            </div>
         </div>
         
-        <div class="flex items-center gap-2 overflow-x-auto mx-2 hide-scroll">
-            <span class="text-[9px] uppercase font-bold text-slate-600 hidden sm:block">Últimos:</span>
-            <div id="history-box" class="flex gap-1"></div>
+        <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 overflow-x-auto hide-scroll max-w-[120px] sm:max-w-none">
+                <span class="text-[9px] uppercase font-bold text-slate-600 hidden sm:block mr-1">Últimos:</span>
+                <div id="history-box" class="flex gap-1"></div>
+            </div>
+
+            <div id="audio-status" class="hidden text-[10px] sm:text-xs text-slate-500 font-bold border border-slate-700 px-2 py-1 rounded whitespace-nowrap">🔇 Audio en TV</div>
+
+            <button id="btn-admin-config" onclick="toggleModal('modal-admin')" class="hidden bg-slate-800 w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg border border-slate-700 text-lg sm:text-xl hover:bg-slate-700 transition-colors">⚙️</button>
         </div>
-
-        <div id="audio-status" class="hidden text-xs text-slate-500 font-bold mr-2 border border-slate-700 px-2 py-1 rounded">🔇 Audio en TV</div>
-
-        <button id="btn-admin-config" onclick="toggleModal('modal-admin')" class="hidden bg-slate-800 w-10 h-10 flex items-center justify-center rounded-lg border border-slate-700 text-xl hover:bg-slate-700 transition-colors">⚙️</button>
     </header>
 
     <main class="flex-1 overflow-y-auto flex flex-col p-3 relative w-full max-w-4xl mx-auto pb-32">
@@ -77,9 +83,15 @@
     </div>
 
     <div id="view-login" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-6">
-        <div class="bg-slate-900 p-6 rounded-2xl w-full max-w-sm border border-slate-800 shadow-2xl">
-            <h1 class="text-2xl font-black text-center mb-6 text-white tracking-tighter">LOTA <span class="text-blue-500">PRO</span></h1>
-            <div class="space-y-3">
+        <div class="bg-slate-900 p-8 rounded-3xl w-full max-w-sm border border-slate-800 shadow-2xl flex flex-col items-center">
+            
+            <img src="/prin.png" alt="Logo Lota con Lucho" class="w-24 h-24 object-contain mb-4 drop-shadow-xl">
+            <h1 class="text-2xl sm:text-3xl font-black text-center mb-6 text-white tracking-tighter leading-none">
+                LOTA CON<br>
+                <span class="text-blue-500 text-3xl sm:text-4xl">LUCHO</span>
+            </h1>
+            
+            <div class="space-y-3 w-full">
                 <input id="in-name" type="text" placeholder="Tu Nombre / ID Pantalla" class="w-full bg-slate-800 p-3 rounded-lg outline-none text-white border border-slate-700 focus:border-blue-500">
                 
                 <div id="div-chips">
@@ -93,7 +105,7 @@
                 </div>
 
                 <input id="in-pass" type="password" placeholder="Contraseña Admin" class="hidden w-full bg-slate-950 p-3 rounded-lg border border-blue-500 outline-none text-center tracking-widest">
-                <button onclick="join()" class="w-full bg-blue-600 py-3 rounded-lg font-black text-white mt-2 shadow-lg">ENTRAR</button>
+                <button onclick="join()" class="w-full bg-blue-600 py-3 rounded-lg font-black text-white mt-2 shadow-lg hover:bg-blue-500 transition-all">ENTRAR</button>
             </div>
         </div>
     </div>
@@ -155,7 +167,6 @@
             const pass = document.getElementById('in-pass');
             const chipsDiv = document.getElementById('div-chips');
             
-            // Reset styles
             [btnP, btnS, btnA].forEach(b => b.className = "flex-1 py-2 rounded font-bold text-xs text-slate-400 hover:bg-slate-700");
             pass.classList.add('hidden');
             chipsDiv.classList.remove('hidden');
@@ -164,7 +175,7 @@
                 btnP.className = "flex-1 py-2 rounded font-bold text-xs bg-blue-600 text-white shadow";
             } else if (r === 'screen') {
                 btnS.className = "flex-1 py-2 rounded font-bold text-xs bg-purple-600 text-white shadow";
-                chipsDiv.classList.add('hidden'); // Pantalla no compra fichas
+                chipsDiv.classList.add('hidden');
             } else {
                 btnA.className = "flex-1 py-2 rounded font-bold text-xs bg-blue-600 text-white shadow";
                 pass.classList.remove('hidden');
@@ -202,7 +213,6 @@
             const me = state.players[socket.id];
             hasActiveScreen = state.hasActiveScreen;
 
-            // Mostrar/Ocultar indicador de audio
             if (hasActiveScreen && role !== 'screen') {
                 document.getElementById('audio-status').classList.remove('hidden');
             } else {
@@ -212,21 +222,19 @@
             if(me) {
                 document.getElementById('view-login').style.display = 'none';
                 
-                // Configurar vista según rol
                 if(me.role === 'admin') {
                     document.getElementById('btn-admin-config').classList.remove('hidden');
-                    document.getElementById('footer-lota').classList.remove('hidden');
                     if(state.status === 'verifying') {
                         document.getElementById('verify-bar').classList.remove('hidden');
                         document.getElementById('footer-lota').classList.add('hidden');
                         document.getElementById('claimant-name').innerText = state.pendingClaim.name;
                     } else {
                         document.getElementById('verify-bar').classList.add('hidden');
+                        document.getElementById('footer-lota').classList.remove('hidden');
                     }
                 } else if(me.role === 'screen') {
-                    document.getElementById('footer-lota').classList.add('hidden'); // Pantalla limpia
+                    document.getElementById('footer-lota').classList.add('hidden');
                 } else {
-                    // Jugador
                     document.getElementById('verify-bar').classList.add('hidden');
                     document.getElementById('footer-lota').classList.remove('hidden');
                 }
@@ -239,7 +247,6 @@
                                    state.status === 'playing' ? `Cantando (${state.config.speed}s)` : 
                                    state.status === 'finished' ? 'Finalizado' : 'Esperando';
             
-            // Botón Lota logic
             const didIWin = state.results.winners.some(w => w.socketId === socket.id);
             const btnLota = document.getElementById('btn-lota');
             if(didIWin) {
@@ -252,7 +259,6 @@
                 btnLota.className = "w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-3xl py-4 rounded-2xl shadow-[0_10px_30px_-10px_rgba(37,99,235,0.5)] active:scale-95 transition-all border-t border-blue-400";
             }
 
-            // Listas
             document.getElementById('player-list').innerHTML = Object.values(state.players).map(p => `
                 <div class="flex justify-between text-[10px] p-1 border-b border-slate-800">
                     <span class="${p.role==='admin' ? 'text-blue-400 font-bold' : (p.role==='screen' ? 'text-purple-400 font-bold' : 'text-slate-300')}">${p.name}</span>
@@ -272,7 +278,6 @@
             }
             document.getElementById('podium-list').innerHTML = podiumHTML;
 
-            // Tablero
             const board = document.getElementById('board');
             if(board.childElementCount !== parseInt(state.maxNumbers)) {
                 board.innerHTML = '';
@@ -285,7 +290,6 @@
             state.calledNumbers.forEach(n => document.getElementById(`n-${n}`)?.classList.add('active'));
             if(state.history[0]) document.getElementById(`n-${state.history[0]}`)?.classList.add('last-call');
 
-            // Historial
             document.getElementById('history-box').innerHTML = state.history.map((n, i) => `
                 <div class="w-6 h-6 shrink-0 rounded bg-slate-800 flex items-center justify-center text-[10px] font-bold border border-slate-700 ${i==0?'text-white bg-blue-600 border-blue-500':''}">
                     ${n}
@@ -293,7 +297,6 @@
             `).join('');
         });
 
-        // TTS LOGIC
         socket.on('new_number', data => {
             document.getElementById('big-num').innerText = data.number;
             handleSpeak(data.number.toString(), data.voice);
@@ -302,10 +305,7 @@
         socket.on('speak_announcement', text => handleSpeak(text, 'female'));
 
         function handleSpeak(text, gender) {
-            // REGLA MAESTRA DE AUDIO:
-            // Si hay pantalla y NO soy pantalla -> SILENCIO
             if (hasActiveScreen && role !== 'screen') return;
-
             window.speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(text);
             u.lang = 'es-ES';
