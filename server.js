@@ -180,4 +180,4 @@ io.on('connection', (socket) => {
 });
 
 app.use(express.static('public'));
-server.listen(3000, () => console.log('Lota Server en puerto 3000'));
+server.listen(process.env.PORT || 3000, () => console.log('Lota Server en puerto ' + (process.env.PORT || 3000)));
